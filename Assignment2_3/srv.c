@@ -41,6 +41,7 @@ typedef struct {
 ClientInfo clients[MAX_CLIENTS];
 int clients_cnt = 0;
 
+int server_fd, client_fd;
 
 //////////////////////////////////////////////////////////////
 // error_handling                                           //
@@ -374,6 +375,10 @@ void pre_arrange(char** filenames, char**temp_filenames, int filecnt){
 // Purpose : command processign                             //
 //////////////////////////////////////////////////////////////
 int cmd_process(char*buff, char*result_buff){
+
+    DIR *dirp;
+    struct dirent *dir;
+
     char current_directory[200];
     getcwd(current_directory, sizeof(current_directory));
     
@@ -382,12 +387,20 @@ int cmd_process(char*buff, char*result_buff){
     char command[30];
     memset(command, 0, sizeof(command));
 
+    char ** argument = (char**)malloc(sizeof(char*)*BUF_SIZE);
+    for(int i = 0; i<BUF_SIZE; i++){
+        argument[i] = (char*)malloc(sizeof(char)*BUF_SIZE);
+    }
+    int argument_cnt = 0;
+
     char directory[BUF_SIZE] = ".";
     int option = 0;
     int aflag = 0;
     int lflag = 0;
     int dir_cnt = 0;
-
+    int option_flag = 0;
+    int invalid = 0;
+    char*cur_dir = (char*)malloc(sizeof(char) * BUF_SIZE);
     /*                  seperate command, options, directory from buffer            */
     char *t_ptr = strtok(buff, " ");
     int td_num = 0;
@@ -409,10 +422,12 @@ int cmd_process(char*buff, char*result_buff){
                     else if(t_ptr[s] == 'l')
                         lflag++;
                     else{
+                        invalid = 1;
                         error_handling(0);
                         return -1;
                     }
                 }
+                option_flag = 1;
                 td_num++;
             }
             //////////////          finish getting options      ///////
@@ -420,6 +435,7 @@ int cmd_process(char*buff, char*result_buff){
             /*                  get directory                         */
             else{
                 strcpy(directory, t_ptr);
+                strcpy(argument[argument_cnt++], t_ptr);
                 dir_cnt++;
                 td_num++;
             }
@@ -427,25 +443,193 @@ int cmd_process(char*buff, char*result_buff){
         }
         else{
             if(dir_cnt == 1){
-                error_handling(4);      //too many directory
+                dir_cnt++;
+                strcpy(argument[argument_cnt++], t_ptr);
+                //error_handling(4);      //too many directory
                 return -1;
             }
             strcpy(directory, t_ptr);   //get directory 
+            strcpy(argument[argument_cnt++], t_ptr);
             td_num++;
         }
         t_ptr = strtok(NULL, " ");
     }
     //////////////////////          finish seperating from command       //////////////////////////
 
+    char temp_pid[100];
+    sprintf(temp_pid, "%d", getpid());
+
     if(!strcmp(command, "QUIT")){       //case of QUIT
-        if(aflag || lflag) return -1;   
-        if(strcmp(directory, ".")) return -1;
+        
+        write(1, "QUIT\t[", 7);
+        write(1, temp_pid, strlen(temp_pid));
+        write(1, "]\n", 3);
+
         strcpy(result_buff, "QUIT");
-        return 1;    
+        return 1;
     }
-    if(!strcmp(command, "NLST")){       //case of NLST
-        DIR *dirp;
-        struct dirent *dir;
+    else if(!strcmp(command, "PWD")){
+        /////////// handling error /////////////////////////////
+        if(option_flag || invalid) error_handling(0);
+        else if(dir_cnt >= 1) error_handling(1);
+        //////////////get current working directory and print ///////////
+        getcwd(cur_dir, BUF_SIZE);
+        
+        write(1, "PWD\t[", 6);
+        write(1, temp_pid, strlen(temp_pid));
+        write(1, "]\n", 3);
+
+        strcpy(result_buff, "\"");
+        strcat(result_buff, cur_dir);
+        strcat(result_buff, "\" is current directory\n\0");
+        return 1;
+    }
+    else if(!strcmp(command, "CWD")){
+        /****************** error check *********************/
+        if(option_flag || invalid) error_handling(0);
+        else if(dir_cnt == 0) error_handling(2);
+        else{           //move to input directory
+            correct_argument(directory);
+            chdir(directory);
+            getcwd(cur_dir, BUF_SIZE);
+        }
+        write(1, command, strlen(command));
+        write(1, " ", strlen(" "));
+        write(1, directory, strlen(directory));
+        write(1, "\t[", 3);        
+        write(1, temp_pid, strlen(temp_pid));
+        write(1, "]\n", 3);
+
+        strcpy(result_buff, "\"");
+        strcat(result_buff, cur_dir);
+        strcat(result_buff, "\" is current directory\n\0");
+        return 1;
+    }
+    else if(!strcmp(command, "CDUP")){
+        if(option_flag || invalid) error_handling(0);
+        chdir("..");//change directory to ..
+        
+        write(1, command, strlen(command));
+        write(1, "\t[", 3);
+        write(1, temp_pid, strlen(temp_pid));
+        write(1, "]\n", 3);
+        
+        getcwd(cur_dir, BUF_SIZE);
+        strcpy(result_buff, "\"");
+        strcat(result_buff, cur_dir);
+        strcat(result_buff, "\" is current directory\n\0");
+        return 0;
+    }
+    else if(!strcmp(command, "MKD")){
+        /////////////// error handling ////////////////////////
+        if(option_flag || invalid) error_handling(0);
+        if(argument_cnt == 0) error_handling(2);
+        ////////////////// make directory //////////////////////
+        write(1, command, strlen(command));
+        write(1, "\t[", 3);
+        write(1, temp_pid, strlen(temp_pid));
+        write(1, "]\n", 3);
+
+        for(int i = 0; i<dir_cnt; i++){
+            if(!(dirp = opendir(argument[i]))){
+                mkdir(argument[i], 0777);
+                strcat(result_buff, "MKD ");
+                strcat(result_buff, argument[i]);
+                strcat(result_buff, "\n\0");
+            }
+            else {  //failed to make directory
+                strcpy(result_buff, "Error : cannot create directory '");
+                strcat(result_buff, argument[i]);
+                strcat(result_buff, "': File exists\n\0");
+            }
+        }
+        return 1;
+    }
+    else if(!strcmp(command, "DELE")){
+        ///////////////error handling ///////////////////
+        if(option_flag || invalid) error_handling(0);
+        if(argument_cnt == 0) error_handling(2);
+
+        write(1, command, strlen(command));
+        write(1, "\t[", 3);
+        write(1, temp_pid, strlen(temp_pid));
+        write(1, "]\n", 3);
+
+        for(int i = 0; i<argument_cnt; i++){
+            int un = unlink(argument[i]);
+            if(un == -1){
+                strcpy(result_buff, "Error : failed to delete '"); //failed to unlink
+                strcat(result_buff, argument[i]);
+                strcat(result_buff, "'\n\0");
+            }
+            if (un == 0){   //succeed in unlinking
+                strcpy(result_buff, "DELE ");
+                strcat(result_buff, argument[i]);
+                strcat(result_buff, "\n\0");
+            }
+        }
+        return 1;
+    }
+    else if(!strcmp(command, "RMD")){
+        if(option_flag || invalid) error_handling(0);
+        if(argument_cnt == 0) error_handling(2);
+        
+        write(1, command, strlen(command));
+        write(1, "\t[", 3);
+        write(1, temp_pid, strlen(temp_pid));
+        write(1, "]\n", 3);
+        
+        for(int i = 0; i<argument_cnt; i++){
+            int rm = rmdir(argument[i]);
+            if(rm == -1){   //failed to remove
+                strcpy(result_buff, "Error : failed to remove '");
+                strcat(result_buff, argument[i]);
+                strcat(result_buff, "'\n\0");
+            }
+            if (rm == 0){   //succeeded in removing
+                strcpy(result_buff, "RMD ");
+                strcat(result_buff, argument[i]);
+                strcat(result_buff, "\n\0");
+            }
+        }
+        return 1;
+    }
+    else if(!strcmp(command, "RNFR")){
+        if(option_flag || invalid) error_handling(0);
+        if(argument_cnt >= 3) error_handling(3);
+        
+        write(1, command, strlen(command));
+        write(1, "\t[", 3);
+        write(1, temp_pid, strlen(temp_pid));
+        write(1, "]\n", 3);
+
+        if(access(argument[1], F_OK)!= -1){ //if there exists name already
+            write(1, "Error : name to change already exists\n\0", 40);
+            exit(0);
+        }
+        struct stat sttemp;
+        if(stat(argument[1], &sttemp) == 0 && S_ISDIR(sttemp.st_mode)){ //failed to rename
+            write(1, "Error : name to change already exists\n\0", 40);
+            exit(0);
+        }
+        int rname = rename(argument[0], argument[1]);
+        
+        if(rname == -1){    //failed to rename
+            write(1, "Error : name to change already exists\n\0", 40);
+            exit(0);
+        }
+        if(rname == 0){ //succeeded in renaming
+            strcpy(result_buff, "RNFR ");
+            strcat(result_buff, argument[1]);
+            strcat(result_buff,"\n");
+            strcat(result_buff, "RNTO ");
+            strcat(result_buff, argument[1]);
+            strcat(result_buff, "\n\0");
+            return 1;
+        }
+    }
+    else if(!strcmp(command, "NLST") || !strcmp(command, "LIST")){       //case of NLST or list
+        if(dir_cnt > 1) error_handling(4);      //too many directory
         struct stat file;
          ////////////////// if the argument is file //////////////////////////
         if(access(directory, F_OK) == -1){
@@ -466,7 +650,11 @@ int cmd_process(char*buff, char*result_buff){
         if(filetype == '-' ){
             if(!lflag)
                 exit(0);
-            write(1, "NLST -l\n", 9);
+            write(1, "NLST -l", 8);
+            write(1, "\t[", 3);
+            write(1, temp_pid, strlen(temp_pid));
+            write(1, "]\n", 3);
+
             option_l(directory, result_buff);
             chdir(current_directory);
             return 1;
@@ -501,61 +689,100 @@ int cmd_process(char*buff, char*result_buff){
         
         ArrangeFilenames(filenames, temp_filenames, 0, filecnt-1);//            arrange files 
 
-        /*                      start nlst -al                        */
+        /************************** start nlst -al **************************/
         if(aflag && lflag){
-            write(1, "NLST -al\n", 10);
+            write(1, "NLST -al", 10);
+            write(1, "\t[", 3);
+            write(1, temp_pid, strlen(temp_pid));
+            write(1, "]\n", 3);
+            
             for(int i = 0; i<filecnt; i++){
                 option_l(filenames[i], result_buff);
             }
             chdir(current_directory);
             return 1;
         }
-        //////////               finish nlst -al               /////////
+        /////////////////////////////////////////////////////////////////////
 
-        /*                      start nlst -a                          */
+        /************************** start nlst -a **************************/
         if(aflag){
-            write(1, "NLST -a\n", 9);
+            write(1, "NLST -a", 8);
+            write(1, "\t[", 3);
+            write(1, temp_pid, strlen(temp_pid));
+            write(1, "]\n", 3);
+            
             int c_num = 0;
             for(int i= 0; i<filecnt; i++){
                 char filetype = GetFiletype(file, filenames[i]);
                 if(filetype == 'd'){        //file type d
                     strcat(result_buff, filenames[i]);
-                    strcat(result_buff, "/\n");
+                    strcat(result_buff, "/\n\0");
                 }
                 else{
                     strcat(result_buff, filenames[i]);
-                    strcat(result_buff, "\n");
+                    strcat(result_buff, "\n\0");
                 }
             }
             chdir(current_directory);
             return 1;
         }
-        //////////               finish nlst -a               /////////
+        ///////////////////////////////////////////////////////////////////
 
-        /*                      start nlst -l                          */
+        /************************* start nlst -l**************************/
         if(lflag){
-            write(1, "NLST -l\n", 9);
+            write(1, "NLST -l", 8);
+            write(1, "\t[", 3);
+            write(1, temp_pid, strlen(temp_pid));
+            write(1, "]\n", 3);
+
             for(int i= 0; i<filecnt; i++){
                 option_l(filenames[i], result_buff);    //get file information
+            }
+
+            if(filecnt == 0){
+                strcpy(result_buff, "\n\0");
             }
             chdir(current_directory);
             return 1;
         }
-        //////////               finish nlst -l               /////////
+        /////////////////////////////////////////////////////////////////
 
+
+        if(!strcmp(command,"LIST")){
+            write(1, "LIST", 5);
+            write(1, "\t[", 3);
+            write(1, temp_pid, strlen(temp_pid));
+            write(1, "]\n", 3);
+
+            for(int i= 0; i<filecnt; i++){
+                option_l(filenames[i], result_buff);    //get file information
+            }
+            if(filecnt == 0){
+                strcpy(result_buff, "\n\0");
+            }
+            chdir(current_directory);
+            return 1;
+        }
         /*                      start nlst                          */
         else{
-            write(1, "NLST\n", 6);
+            write(1, "NLST", 5);
+            write(1, "\t[", 3);
+            write(1, temp_pid, strlen(temp_pid));
+            write(1, "]\n", 3);
+
             for(int i =0; i<filecnt; i++){
                 char filetype = GetFiletype(file, filenames[i]);
                 if(filetype == 'd'){            //filetype d
                     strcat(result_buff, filenames[i]);
-                    strcat(result_buff, "/\n");
+                    strcat(result_buff, "/\n\0");
                 }
                 else{
                     strcat(result_buff, filenames[i]);
-                    strcat(result_buff, "\n");
+                    strcat(result_buff, "\n\0");
                 }
+            }
+            if(filecnt == 0){
+                strcpy(result_buff, "\n\0");
             }
             chdir(current_directory);
             return 1;
@@ -599,67 +826,41 @@ int client_info(struct sockaddr_in client_addr){
     return 1;
 }
 
-void process_command(int connfd) {
 
-    char buffer[BUF_SIZE];
-    ssize_t n;
-
-    while ((n = read(connfd, buffer, BUF_SIZE - 1)) > 0) {
-        buffer[n] = '\0';
-        printf("Received from client: %s\n", buffer);
-
-        // 클라이언트 명령 처리 로직 추가
-
-        // 클라이언트로 응답 전송
-        write(connfd, buffer, strlen(buffer));
-
-        // "quit" 명령 처리
-        if (strcmp(buffer, "quit") == 0) {
-            break;
-        }
-    }
-
-    close(connfd);
-}
-
-/************************************case of QUIT client***********************************
-*
-*    pid_t pid;
-*    int status;
-*    while((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-*        for(int i = 0; i<clients_cnt; i++){
-*            if(clients[i].pid == pid){
-*                kill(clients[i].pid, SIGTERM);
-*                printf("Client(%d)'s Release\n", pid);
-*                for(int j = i; j<clients_cnt-1; j++){
-*                    clients[j] = clients[j+1];
-*                }
-*                clients_cnt--;
-*                break;
-*            }
-*        }
-*    }
-*****************************************************************************************/
-
-
-
-
-
-
-void print_child_process() {
-    printf("Current number of client: %d\n", clients_cnt);
-    printf("PID\tPORT\tTIME\t\n");
+//////////////////////////////////////////////////////////////
+// timer_handler                                            //
+// ======================================================== //
+// Input : int sig                                          //
+//        (Input parameter Description)                     //
+// Output : void                                            //
+//        (Out parameter Description)                       //
+// Purpose : print information of clients every 10seconds   //
+//////////////////////////////////////////////////////////////
+void timer_handler(int sig) {
+    write(1, "Current number of client: ", 27);  //print number of clients
+    char temp[10];
+    sprintf(temp, "%d", clients_cnt);
+    write(1, temp, strlen(temp));
+    write(1, "\n", 2);
+    /********************** print current clients *****************************/
+    write(1, "PID\tPORT\tTIME\t\n", 16);
     for (int i = 0; i < clients_cnt; i++) {
         time_t current_time = time(NULL);
-        int process_time = (int)(current_time - clients[i].start_time);
-        printf("%d\t%d\t%d\n", clients[i].pid, clients[i].port, process_time);
+        int process_time = (int)(current_time - clients[i].start_time) + 1;
+        
+        sprintf(temp, "%d", clients[i].pid);
+        write(1, temp, strlen(temp));
+        write(1, "\t", 2);
+        sprintf(temp, "%d", clients[i].port);
+        write(1, temp, strlen(temp));
+        write(1, "\t", 2);
+        sprintf(temp, "%d", process_time);
+        write(1, temp, strlen(temp));
+        write(1, "\t", 2);
+        write(1, "\n", 2);
     }
-}
-
-
-void timer_handler(int sig) {
-    print_child_process();
-    alarm(10); // 10초 후에 다시 알람 설정
+    /**************************************************************************/
+    alarm(10);//set 10seconds
 }
 
 //////////////////////////////////////////////////////////////
@@ -672,19 +873,56 @@ void timer_handler(int sig) {
 // Purpose : signal handling in case of terminate server    //
 //////////////////////////////////////////////////////////////
 void sigint_handler(int sig) {
-
-    // 모든 클라이언트 연결 종료 및 자식 프로세스 종료
+    /******************end every clients and child processes************************/
     for (int i = 0; i < clients_cnt; i++) {
         kill(clients[i].pid, SIGTERM);
     }
+    close(client_fd);
+    close(server_fd);
     exit(0);
+    /*******************************************************************************/
 }
 
+//////////////////////////////////////////////////////////////
+// remove_client                                            //
+// ======================================================== //
+// Input : int sig                                          //
+//        (Input parameter Description)                     //
+// Output : void                                            //
+//        (Out parameter Description)                       //
+// Purpose : kill terminated child process                  //
+//////////////////////////////////////////////////////////////
+void remove_client(int sig){
+    int status;
+    pid_t p = wait(&status);    //get pid of terminated child process
+    for (int i = 0; i < clients_cnt; i++) {
+        if (clients[i].pid == p) {
+            kill(p, SIGTERM);       //kill child process
+            printf("Client(%d)'s Release\n", p);
+            /*************** erase process information ****************/
+            for (int j = i; j < clients_cnt; j++) {
+                clients[j] = clients[j+1];
+            }
+            clients_cnt--;
+            break;
+            /*********************************************************/
+        }
+    }
+}
+
+//////////////////////////////////////////////////////////////
+// main                                                     //
+// ======================================================== //
+// Input : int argc, char*argv[]                            //
+//        (Input parameter Description)                     //
+// Output : int                                             //
+//        (Out parameter Description)                       //
+// Purpose : make server socket and communicate with clients//
+//////////////////////////////////////////////////////////////
 int main(int argc, char*argv[]) {
     char buff[BUF_SIZE];
     int n;
     struct sockaddr_in server_addr, client_addr;
-    int server_fd, client_fd;
     int len;
     int port;
     
@@ -713,6 +951,7 @@ int main(int argc, char*argv[]) {
     /**************************** register signal handling  ********************************/
     signal(SIGALRM, timer_handler);
     signal(SIGINT, sigint_handler);
+    signal(SIGCHLD, remove_client);
     alarm(10); // set 10 seconds alarm
     /***************************************************************************************/
 
@@ -722,21 +961,29 @@ int main(int argc, char*argv[]) {
         pid_t pid;
         len = sizeof(client_addr);
         client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &len);   //connect
+        if(client_info(client_addr) < 0) 
+            write(STDERR_FILENO, "client_info() err!!\n", 21);
 
-        if ((pid = fork()) == 0) { // chile process
-
+        if ((pid = fork()) == 0) { // child process
             close(server_fd); // close server socket which is used in parent process
-
-            if(client_info(client_addr) < 0) 
-                write(STDERR_FILENO, "client_info() err!!\n", 21);
-
             /****************************   communicate between sockets     *********************************/
             while(1){
                 n = read(client_fd, buff, BUF_SIZE);        //read string from client
-
                 char result_buff[BUF_SIZE];
                 cmd_process(buff, result_buff);
+                //if(!strcmp(result_buff, "QUIT")){
+                    //printf("Client(%d)'s Release\n", getpid());
+                    
+                    //kill(getppid(), SIGUSR1);
+                    //close(client_fd);
+                    //exit(0);                
+                //}
+                if(!strcmp(result_buff, "QUIT")){
+                    close(client_fd);
+                    exit(0);   
+                }
                 write(client_fd, result_buff, strlen(result_buff));
+                
             }
             /************************************************************************************************/
 
@@ -747,7 +994,11 @@ int main(int argc, char*argv[]) {
             clients[clients_cnt].port = client_addr.sin_port;
             clients[clients_cnt].start_time = time(NULL);
             clients_cnt++;
+            timer_handler(1);
+            alarm(10); // set 10 seconds alarm
+            
             close(client_fd); // close client socket which is used in child process
+            
         } else { // fork failed
             perror("fork");
             exit(1);
@@ -757,3 +1008,4 @@ int main(int argc, char*argv[]) {
     close(server_fd);
     return 0;
 }
+

@@ -21,8 +21,9 @@
 #include<signal.h>
 #include<string.h>
 
-#define BUF_SIZE 256
+#define BUF_SIZE 4096
 
+int sockfd;
 
 //////////////////////////////////////////////////////////////
 // conv_cmd                                                 //
@@ -92,6 +93,12 @@ int conv_cmd(char*buff, char*cmd_buff){
 
     return 0;
 }
+void sigint_handler(int sig) {
+    char temp_buff[BUF_SIZE];
+    strcpy(temp_buff, "QUIT");
+    write(sockfd, temp_buff, strlen(temp_buff));
+    exit(0);
+}
 //////////////////////////////////////////////////////////////
 // main                                                     //
 // ======================================================== //
@@ -107,7 +114,6 @@ int main(int argc, char**argv)
     char cmd_buff[BUF_SIZE];
     char buff[BUF_SIZE];
     int n;
-    int sockfd;
     struct sockaddr_in serv_addr;
 
     /********************* prepare client socket **********************/
@@ -119,6 +125,8 @@ int main(int argc, char**argv)
     serv_addr.sin_port = htons(atoi(argv[2]));
     connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
     /*****************************************************************/
+    int sig;
+    signal(SIGINT, sigint_handler);
 
     while(1){
         memset(buff, 0, BUF_SIZE);
