@@ -1,6 +1,6 @@
 //////////////////////////////////////////////////////////////
 // File Name : srv.c                                        //
-// Date : 2024/05/16                                        //  
+// Date : 2024/05/14                                        //  
 // OS : Ubuntu 20.04 LTS 64bits                             //
 // Author : Lee Sang Hyeon                                  //
 // Student ID : 2019202032                                  //
@@ -32,13 +32,16 @@
 #define BUF_SIZE 4096
 #define MAX_CLIENTS 10
 
+/***************    client information struct array     **************/
 typedef struct {
     int pid;
     int port;
     time_t start_time;
 } ClientInfo;
+/********************************************************************/
 
-ClientInfo clients[MAX_CLIENTS];
+ClientInfo clients[MAX_CLIENTS];    //clients array
+
 int clients_cnt = 0;
 
 int server_fd, client_fd;
@@ -52,28 +55,26 @@ int server_fd, client_fd;
 //        (Out parameter Description)                       //
 // Purpose : handle error                                   //
 //////////////////////////////////////////////////////////////
-void error_handling(int num){
+void error_handling(int num, char*result_buff){
     /////////////   start checking error type   /////////////
     if(num == 0)    //case of invalid option
     {   
-        write(1, "Error : invalid option\n\0", 25);
+        strcpy(result_buff, "Error : invalid option\n\0");
     }
     else if(num == 1)   //case of invalid argument 
     {   
-        write(1, "Error : argument is not required\n\0", 35);
-
+        strcpy(result_buff, "Error : argument is not required\n\0");
     }
     else if(num == 2){  //case of no argument
-        write(1, "Error : argument is required\n\0", 31);
+        strcpy(result_buff, "Error : argument is required\n\0");
     }
     else if(num == 3){  //case of lack argument
-        write(1, "Error : two arguments are required\n\0", 37);
+        strcpy(result_buff, "Error : two arguments are required\n\0");
     }
     else if(num == 4){  //case of much too many arguments
-        write(1, "Error : only one argument can be processed\n\0", 45);
+        strcpy(result_buff, "Error : only one argument can be processed\n\0");
     }
     ////////////// end checking argument /////////////////////
-    exit(0);
 }
 //////////////////////////////////////////////////////////////
 // GetFiletype                                              //
@@ -167,7 +168,7 @@ void GetPermission(struct stat file, char *filename, char*permission)
 //        (Out parameter Description)                       //
 // Purpose : check if the argument trying to open is valid  //
 //////////////////////////////////////////////////////////////
-void correct_argument(char* argument)
+int correct_argument(char* argument, char*result_buff)
 {
     char *BUF = (char*)malloc(sizeof(char)*BUF_SIZE);
     DIR *dirp;
@@ -181,16 +182,17 @@ void correct_argument(char* argument)
         char filetype = GetFiletype(file, argument);   //get filetype
         if(filetype != 'N'){    //if the path is existing
             if(permission[0] == '-'){       //if not able to access file
-                write(1, "Error : cannot access\n", 23);
+                strcpy(result_buff, "Error : cannot access\n");
             }   //end of if
         }
         else{   //if there is no permission => not existing directory
-            write(1, "Error : No such file or directory\n", 35);
+            strcpy(result_buff, "Error : No such file or directory\n");
         }   //end of else
         free(permission);
-        exit(0);
+        return -1;
     }
     free(BUF);
+    return 0;
 }
 
 //////////////////////////////////////////////////////////////
@@ -423,7 +425,7 @@ int cmd_process(char*buff, char*result_buff){
                         lflag++;
                     else{
                         invalid = 1;
-                        error_handling(0);
+                        error_handling(0, result_buff);
                         return -1;
                     }
                 }
@@ -442,14 +444,9 @@ int cmd_process(char*buff, char*result_buff){
             //////////////          finish getting directory      ///////
         }
         else{
-            if(dir_cnt == 1){
-                dir_cnt++;
-                strcpy(argument[argument_cnt++], t_ptr);
-                //error_handling(4);      //too many directory
-                //return -1;
-            }
-            //strcpy(directory, t_ptr);   //get directory 
-            //strcpy(argument[argument_cnt++], t_ptr);
+            dir_cnt++;
+            strcpy(argument[argument_cnt++], t_ptr);
+            strcpy(directory, t_ptr);
             td_num++;
         }
         t_ptr = strtok(NULL, " ");
@@ -469,8 +466,14 @@ int cmd_process(char*buff, char*result_buff){
     }
     else if(!strcmp(command, "PWD")){
         /////////// handling error /////////////////////////////
-        if(option_flag || invalid) error_handling(0);
-        else if(dir_cnt >= 1) error_handling(1);
+        if(option_flag || invalid) {
+            error_handling(0, result_buff);
+            return -1;
+        }
+        else if(dir_cnt >= 1) {
+            error_handling(1, result_buff);
+            return -1;
+        }
         //////////////get current working directory and print ///////////
         getcwd(cur_dir, BUF_SIZE);
         
@@ -485,16 +488,21 @@ int cmd_process(char*buff, char*result_buff){
     }
     else if(!strcmp(command, "CWD")){
         /****************** error check *********************/
-        if(option_flag || invalid) error_handling(0);
-        else if(dir_cnt == 0) error_handling(2);
+        if(option_flag || invalid) {
+            error_handling(0, result_buff);
+            return -1;
+        }
+        else if(dir_cnt == 0) {
+            error_handling(2, result_buff);
+            return -1;
+        }
         else{           //move to input directory
-            correct_argument(directory);
+            if(correct_argument(directory, result_buff)<0)
+                return 0;
             chdir(directory);
             getcwd(cur_dir, BUF_SIZE);
         }
         write(1, command, strlen(command));
-        write(1, " ", strlen(" "));
-        write(1, directory, strlen(directory));
         write(1, "\t[", 3);        
         write(1, temp_pid, strlen(temp_pid));
         write(1, "]\n", 3);
@@ -505,7 +513,10 @@ int cmd_process(char*buff, char*result_buff){
         return 1;
     }
     else if(!strcmp(command, "CDUP")){
-        if(option_flag || invalid) error_handling(0);
+        if(option_flag || invalid) {
+            error_handling(0, result_buff);
+            return 1;
+        }
         chdir("..");//change directory to ..
         
         write(1, command, strlen(command));
@@ -521,8 +532,14 @@ int cmd_process(char*buff, char*result_buff){
     }
     else if(!strcmp(command, "MKD")){
         /////////////// error handling ////////////////////////
-        if(option_flag || invalid) error_handling(0);
-        if(argument_cnt == 0) error_handling(2);
+        if(option_flag || invalid) {
+            error_handling(0, result_buff);
+            return 0;
+        }
+        if(argument_cnt == 0) {
+            error_handling(2, result_buff);
+            return 0;
+        }
         ////////////////// make directory //////////////////////
         write(1, command, strlen(command));
         write(1, "\t[", 3);
@@ -546,8 +563,14 @@ int cmd_process(char*buff, char*result_buff){
     }
     else if(!strcmp(command, "DELE")){
         ///////////////error handling ///////////////////
-        if(option_flag || invalid) error_handling(0);
-        if(argument_cnt == 0) error_handling(2);
+        if(option_flag || invalid) {
+            error_handling(0, result_buff);
+            return 0;
+        }
+        if(argument_cnt == 0) {
+            error_handling(2, result_buff);
+            return 0;
+        }
 
         write(1, command, strlen(command));
         write(1, "\t[", 3);
@@ -570,8 +593,14 @@ int cmd_process(char*buff, char*result_buff){
         return 1;
     }
     else if(!strcmp(command, "RMD")){
-        if(option_flag || invalid) error_handling(0);
-        if(argument_cnt == 0) error_handling(2);
+        if(option_flag || invalid) {
+            error_handling(0, result_buff);
+            return 0;
+        }
+        if(argument_cnt == 0) {
+            error_handling(2, result_buff);
+            return 0;
+        }
         
         write(1, command, strlen(command));
         write(1, "\t[", 3);
@@ -594,8 +623,14 @@ int cmd_process(char*buff, char*result_buff){
         return 1;
     }
     else if(!strcmp(command, "RNFR")){
-        if(option_flag || invalid) error_handling(0);
-        if(argument_cnt >= 3) error_handling(3);
+        if(option_flag || invalid) {
+            error_handling(0, result_buff);
+            return 0;
+        }
+        if(argument_cnt >= 3) {
+            error_handling(3, result_buff);
+            return 0;
+        }
         
         write(1, command, strlen(command));
         write(1, "\t[", 3);
@@ -603,19 +638,19 @@ int cmd_process(char*buff, char*result_buff){
         write(1, "]\n", 3);
 
         if(access(argument[1], F_OK)!= -1){ //if there exists name already
-            write(1, "Error : name to change already exists\n\0", 40);
-            exit(0);
+            strcpy(result_buff, "Error : name to change already exists\n\0");
+            return 0;
         }
         struct stat sttemp;
         if(stat(argument[1], &sttemp) == 0 && S_ISDIR(sttemp.st_mode)){ //failed to rename
-            write(1, "Error : name to change already exists\n\0", 40);
-            exit(0);
+            strcpy(result_buff, "Error : name to change already exists\n\0");
+            return 0;
         }
         int rname = rename(argument[0], argument[1]);
         
         if(rname == -1){    //failed to rename
-            write(1, "Error : name to change already exists\n\0", 40);
-            exit(0);
+            strcpy(result_buff, "Error : name to change already exists\n\0");
+            return 0;
         }
         if(rname == 0){ //succeeded in renaming
             strcat(result_buff, "RNFR ");
@@ -628,27 +663,32 @@ int cmd_process(char*buff, char*result_buff){
         }
     }
     else if(!strcmp(command, "NLST") || !strcmp(command, "LIST")){       //case of NLST or list
-        if(dir_cnt > 1) error_handling(4);      //too many directory
+        if(dir_cnt > 1) {
+            error_handling(4, result_buff);      //too many directory
+            return 0;
+        }
         struct stat file;
          ////////////////// if the argument is file //////////////////////////
         if(access(directory, F_OK) == -1){
-            correct_argument(directory);//check if i can open the directory
-        }
 
+            if(correct_argument(directory, result_buff) < 0) return 0;//check if i can open the directory
+        }
         /*               case of no read permission             */
         char per[100];
         GetPermission(file, directory, per);
         if(per[0] == '-')
         {    
-            write(1, "cannot access\n\0", 16);
-            exit(0);
+            strcpy(result_buff, "cannot access\n\0");
+            return 1;
         }
         
         char filetype = GetFiletype(file, directory); //get filetype
         /*                      If directory is file                 */
-        if(filetype == '-' ){
-            if(!lflag)
-                exit(0);
+        if(filetype == '-' ){        
+            if(!lflag) {
+                strcpy(result_buff, "need -l option");
+                return 0;
+            }
             write(1, "NLST -l", 8);
             write(1, "\t[", 3);
             write(1, temp_pid, strlen(temp_pid));
@@ -658,13 +698,14 @@ int cmd_process(char*buff, char*result_buff){
             chdir(current_directory);
             return 1;
         }
-
+        
         char**filenames = (char**)malloc(sizeof(char*)*BUF_SIZE);
         for(int i = 0; i<BUF_SIZE; i++){
             filenames[i] = (char*)malloc(sizeof(char)*BUF_SIZE);
         }
         int filecnt = 0;
         /*              get the files of directory          */        
+
         dirp = opendir(directory);
         while((dir=readdir(dirp))!= NULL){
             if(aflag)                        //if a option
