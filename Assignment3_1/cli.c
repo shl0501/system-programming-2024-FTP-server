@@ -52,41 +52,49 @@ void log_in(int sockfd) {
 
 
     for (;;) {
-        /******************** get ID from user *****************/
+        /******************** send ID and username from user *****************/
         write(1, "Input ID : ", 12);
+        memset(username, 0, MAX_BUF);
         if (read(STDIN_FILENO, username, MAX_BUF) < 0) { /* receive string from user*/
             close(sockfd);
             exit(0);
         }
-        username[n - 1] = '\0';
+        username[strlen(username) - 1] = '\0';
+
+        //get password from user
+        passwd = getpass("Input Password : ");
+
 
         //pass username to server
         write(sockfd, username, strlen(username));
-        /*******************************************************/
 
-        /******************** get password from user *****************/
-        passwd = getpass("Input Password : ");
+        memset(buf, 0, MAX_BUF);
+        read(sockfd, buf, MAX_BUF);
+
+        //pass password to server
         write(sockfd, passwd, strlen(passwd));
         /*************************************************************/
+
         memset(buf, 0, MAX_BUF);
         n = read(sockfd, buf, MAX_BUF);
-        buf[n] = '\0';
+        buf[n - 1] = '\0';
 
         if (!strcmp(buf, "OK")) {
             memset(buf, 0, MAX_BUF);
             n = read(sockfd, buf, MAX_BUF);
-            buf[n] = '\0';
-
+            buf[n - 1] = '\0';
             if (!strcmp(buf, "OK")) {
                 printf("** User '%s' logged in **\n", username);
+                close(sockfd);
                 break;
             }
             if (!strcmp(buf, "FAIL")) {
-                printf("** Log-in failed **\n");
+                write(1, "** Log-in failed **\n", 21);
                 continue;
             }
             if (!strcmp(buf, "DISCONNECTION")) { // buf is ¡°DISCONNECTION¡±
-                printf("** Connection closed **\n");
+                write(1, "** Connection closed **\n", 25);
+                close(sockfd);
                 break;
             }
         }

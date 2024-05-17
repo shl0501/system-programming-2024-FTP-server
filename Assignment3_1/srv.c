@@ -40,7 +40,7 @@
 //        (Out parameter Description)                       //
 // Purpose : print client port_num and client ip address    //
 //////////////////////////////////////////////////////////////
-int client_info(struct sockaddr_in client_addr, char*ip){
+int client_info(struct sockaddr_in client_addr, char* ip) {
     write(1, "** Client is trying to connect **\n", 35);
     /********************** client IP address ************************/
     write(1, " - IP : ", 9);
@@ -59,14 +59,17 @@ int client_info(struct sockaddr_in client_addr, char*ip){
 }
 
 
-int user_match(char*user, char*passwd)
+int user_match(char* user, char* passwd)
 {
-    FILE *fp;
-    struct passwd *pw;
+    FILE* fp;
+    struct passwd* pw;
     fp = fopen("passwd", "r");
-    while((pw = fgetpwent(fp))!= NULL) {
-        if(!strcmp(user, pw->pw_name)) {
-            if(!strcmp(passwd, pw->pw_passwd)) {
+    if (fp == NULL) {
+        return 0;
+    }
+    while ((pw = fgetpwent(fp)) != NULL) {
+        if (!strcmp(user, pw->pw_name)) {
+            if (!strcmp(passwd, pw->pw_passwd)) {
                 return 1;
             }
         }
@@ -78,28 +81,34 @@ int log_auth(int connfd)
     char user[MAX_BUF], passwd[MAX_BUF];
     int n, count = 1;
 
-    while(1) {
+    while (1) {
+        char temp[10];
+        sprintf(temp, "%d", count);
+        write(1, "** User is trying to log-in (", 30);
+        write(1, temp, strlen(temp));
+        write(1, "/3) **\n", 8);
+
         memset(user, 0, MAX_BUF);
         memset(passwd, 0, MAX_BUF);
-    /****************   read username and password form client *************/
+        /****************   read username and password form client *************/
         n = read(connfd, user, MAX_BUF);
-        user[n-1] = '\0';
+        write(connfd, "NULL", 5);
 
         n = read(connfd, passwd, MAX_BUF);
-    /***********************************************************************/
+        /***********************************************************************/
 
         write(connfd, "OK", 3);
 
-        if((n = user_match(user, passwd)) == 1) {
+        if (n = (user_match(user, passwd)) == 1) {
             write(connfd, "OK", 3);
+            return 1;
         }
-
-        else if(n == 0) {
-            if(count >= 3) {    /* 3 time failed*/
-
+        else if (n == 0) {
+            if (count >= 3) {    /* 3 time failed*/
                 write(connfd, "DISCONNECTION", 14);
                 return 0;
             }
+            write(1, "** Log-in failed **\n", 21);
             write(connfd, "FAIL", 5);
             count++;
             continue;
@@ -117,53 +126,53 @@ int log_auth(int connfd)
 //        (Out parameter Description)                       //
 // Purpose : slice ip address by dot(.)                     //
 //////////////////////////////////////////////////////////////
-void Ip_Slicing(char *str, char**sliced) {
+void Ip_Slicing(char* str, char** sliced) {
     int num = 0;
-    char *ptr = strtok(str, ".");
-    while(ptr != NULL) {
+    char* ptr = strtok(str, ".");
+    while (ptr != NULL) {
         strcpy(sliced[num++], ptr);
         ptr = strtok(NULL, ".");
     }
 }
-int main(int argc, char*argv[]) {
+int main(int argc, char* argv[]) {
     int listenfd, connfd;
     struct sockaddr_in servaddr, cliaddr;
-    FILE *fp_checkIP;   //FILE stream to check client's IP
+    FILE* fp_checkIP;   //FILE stream to check client's IP
 
     /********************* prepare server socket and connect with client socket **********************/
     listenfd = socket(PF_INET, SOCK_STREAM, 0);
     int opt = 1;
     setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    
+
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);//set address
     servaddr.sin_port = htons(atoi(argv[1]));//set port
-        
-    if(bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0){  //bind socket
+
+    if (bind(listenfd, (struct sockaddr*)&servaddr, sizeof(servaddr)) < 0) {  //bind socket
         printf("Server: Can't bind local address\n");
         return 0;
-    }   
+    }
 
     listen(listenfd, 5);   //listen from client
     /*************************************************************************************************/
-    for(;;) {
+    for (;;) {
         int clilen = sizeof(cliaddr);
-        connfd = accept(listenfd, (struct sockaddr *) &cliaddr, &clilen);
-        
+        connfd = accept(listenfd, (struct sockaddr*)&cliaddr, &clilen);
+
         /******************** get ip address from client ******************/
         char client_ip[MAX_BUF];
         int n = read(connfd, client_ip, MAX_BUF);
         client_ip[n] = '\0';
-        
+
         //print information of client//
         client_info(cliaddr, client_ip);
-        
+
         /*****************************************************************/
 
         /***************** open access.txt ******************/
         fp_checkIP = fopen("access.txt", "r");
-        if(fp_checkIP == NULL) {
+        if (fp_checkIP == NULL) {
             printf("Error: cannot open access file\n");
             close(connfd);
             continue;
@@ -174,53 +183,57 @@ int main(int argc, char*argv[]) {
         int find = 1;
 
         /**************** check if client ip is acceptable ****************/
-        while((fgets(IPs, MAX_BUF, fp_checkIP) != NULL))
+        while ((fgets(IPs, MAX_BUF, fp_checkIP) != NULL))
         {
             find = 1;
-            IPs[strlen(IPs)-1] = '\0';
-            
+            if (IPs[strlen(IPs) - 1] == '\n')
+                IPs[strlen(IPs) - 1] = '\0';
+            else
+                IPs[strlen(IPs)] = '\0';
             /************ allocate string array *************/
-            char **access_IP = (char**)malloc(sizeof(char*) * 5);
-            for(int i = 0; i<5; i++){
-            access_IP[i] = (char*)malloc(sizeof(char) * 10);
+            char** access_IP = (char**)malloc(sizeof(char*) * 5);
+            for (int i = 0; i < 5; i++) {
+                access_IP[i] = (char*)malloc(sizeof(char) * 10);
             }
 
-            char **input_IP = (char**)malloc(sizeof(char*) * 5);
-            for(int i = 0; i<5; i++){
-            input_IP[i] = (char*)malloc(sizeof(char) * 10);
+            char** input_IP = (char**)malloc(sizeof(char*) * 5);
+            for (int i = 0; i < 5; i++) {
+                input_IP[i] = (char*)malloc(sizeof(char) * 10);
             }
             /***********************************************/
+
 
             /********** Slicing IP address by dot(.) ***********/
             Ip_Slicing(IPs, access_IP);
             Ip_Slicing(client_ip, input_IP);
             /***************************************************/
-            
+
+
             /***************** Check string *****************/
-            for(int i = 0; i<4; i++){
-                if(!strcmp(input_IP[i], "*"))   //wildcard
+            for (int i = 0; i < 4; i++) {
+                if (!strcmp(input_IP[i], "*"))   //wildcard
                     continue;
-                if(!strcmp(access_IP[i], "*"))  //wildcard
+                if (!strcmp(access_IP[i], "*"))  //wildcard
                     continue;
-                if(strcmp(access_IP[i], input_IP[i]))   //not equal string
+                if (strcmp(access_IP[i], input_IP[i]))   //not equal string
                     find = 0;
             }
             /***********************************************/
 
             /************ free string array *************/
-            for(int i = 0; i<5; i++){
+            for (int i = 0; i < 5; i++) {
                 free(access_IP[i]);
             }
             free(access_IP);
-            
-            for(int i = 0; i<5; i++){
+
+            for (int i = 0; i < 5; i++) {
                 free(input_IP[i]);
             }
             free(input_IP);
             /***********************************************/
 
             /************** client connected ***************/
-            if(find) {
+            if (find) {
                 write(1, "** Client is connected **\n", 27);
                 write(connfd, "ACCEPTED", 9);
                 break;
@@ -229,7 +242,7 @@ int main(int argc, char*argv[]) {
         }
 
         /***************    failed to connect   ***************/
-        if(!find) {
+        if (!find) {
             write(1, "** It is not authenticated client **\n", 38);
             write(connfd, "REJECTION", 10);
             close(connfd);
@@ -240,12 +253,14 @@ int main(int argc, char*argv[]) {
 
         /******************************************************************/
 
-        if(log_auth(connfd) == 0) {
-            printf("** Fail to log-in **\n");
+        if (log_auth(connfd) == 0) {
+            write(1, "** Fail to log-in **\n", 22);
             close(connfd);
+            break;
             continue;
         }
-        printf("** Success to log-in **\n");
+        write(1, "** Success to log-in **\n", 25);
         close(connfd);
+        break;
     }
 }
