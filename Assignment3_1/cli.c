@@ -1,14 +1,14 @@
 //////////////////////////////////////////////////////////////
 // File Name : cli.c                                        //
-// Date : 2024/05/14                                        //  
+// Date : 2024/05/18                                        //  
 // OS : Ubuntu 20.04 LTS 64bits                             //
 // Author : Lee Sang Hyeon                                  //
 // Student ID : 2019202032                                  //
 // -------------------------------------------------------- //
-// Title : System Programming Assignment #2-3 (client)      //
-// Description : open client socket and connect with server //
-//               convert input command and send it to server//
-//               receive result from server                 //
+// Title : System Programming Assignment #3-1 (client)      //
+// Description : execute cli with ip address and port number//
+//               get username and password from user        //
+//               trying to log-in and get result from server//
 //////////////////////////////////////////////////////////////
 #include<stdio.h>
 #include<stdlib.h>
@@ -25,6 +25,15 @@
 #define CONT_PORT 20001
 
 char ip_str[30];
+//////////////////////////////////////////////////////////////
+// log_in                                                   //
+// ======================================================== //
+// Input : int sockfd                                       //
+//        (Input parameter Description)                     //
+// Output : void                                            //
+//        (Out parameter Description)                       //
+// Purpose : check if user can log-in                       //
+//////////////////////////////////////////////////////////////
 void log_in(int sockfd) {
     int n;
     char username[MAX_BUF], * passwd, buf[MAX_BUF];
@@ -36,7 +45,7 @@ void log_in(int sockfd) {
 
     /************** read result from server **************/
     n = read(sockfd, buf, MAX_BUF);
-    buf[n - 1] = '\0';
+    buf[strlen(buf)] = '\0';
     /****************************************************/
 
     /****************** check result ********************/
@@ -77,30 +86,45 @@ void log_in(int sockfd) {
 
         memset(buf, 0, MAX_BUF);
         n = read(sockfd, buf, MAX_BUF);
-        buf[n - 1] = '\0';
+        write(sockfd, "NULL", 5);   //meaningless
 
+        buf[strlen(buf)] = '\0';
         if (!strcmp(buf, "OK")) {
             memset(buf, 0, MAX_BUF);
-            n = read(sockfd, buf, MAX_BUF);
-            buf[n - 1] = '\0';
+
+            read(sockfd, buf, MAX_BUF); //get result from server
+            buf[strlen(buf)] = '\0';
+            /***************case of success***************/
             if (!strcmp(buf, "OK")) {
-                printf("** User '%s' logged in **\n", username);
-                close(sockfd);
+                write(1, "** User '", 10);
+                write(1, username, strlen(username));
+                write(1, "' logged in **\n", 16);
                 break;
             }
-            if (!strcmp(buf, "FAIL")) {
+            /********************************************/
+
+            /*************Failed to log-in**************/
+            if (!strcmp(buf, "FAIL")) {   //fail->re-try
                 write(1, "** Log-in failed **\n", 21);
                 continue;
             }
             if (!strcmp(buf, "DISCONNECTION")) { // buf is ¡°DISCONNECTION¡±
                 write(1, "** Connection closed **\n", 25);
-                close(sockfd);
                 break;
             }
+            /*******************************************/
         }
     }
 }
-
+//////////////////////////////////////////////////////////////
+// main                                                     //
+// ======================================================== //
+// Input : int argc, char*argv[]                            //
+//        (Input parameter Description)                     //
+// Output : int                                             //
+//        (Out parameter Description)                       //
+// Purpose : connect sockets and control logic              //
+//////////////////////////////////////////////////////////////
 int main(int argc, char* argv[])
 {
     int sockfd, n, p_pd;
@@ -119,7 +143,7 @@ int main(int argc, char* argv[])
     servaddr.sin_port = htons(atoi(argv[2]));
     connect(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr));    //connect with server
 /*****************************************************************/
-    log_in(sockfd);
+    log_in(sockfd); //log_in process
     close(sockfd);
     return 0;
 }

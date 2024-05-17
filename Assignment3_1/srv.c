@@ -1,15 +1,15 @@
 //////////////////////////////////////////////////////////////
 // File Name : srv.c                                        //
-// Date : 2024/05/14                                        //  
+// Date : 2024/05/18                                        //  
 // OS : Ubuntu 20.04 LTS 64bits                             //
 // Author : Lee Sang Hyeon                                  //
 // Student ID : 2019202032                                  //
 // -------------------------------------------------------- //
 // Title : System Programming Assignment #2-3 (server)      //
 // Description : open server socket and connect with client //
-//               get converted command from client          //
-//               fork process and accept multiple client    //
-//               send result to client from child process   //
+//               check if ip-address is efficient           //
+//               check if received user-info is correct     //
+//               send result of log-in to client            //
 //////////////////////////////////////////////////////////////
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,24 +58,43 @@ int client_info(struct sockaddr_in client_addr, char* ip) {
     return 1;
 }
 
-
+//////////////////////////////////////////////////////////////
+// user_match                                               //
+// ======================================================== //
+// Input : char*user, char*passwd                           //
+//        (Input parameter Description)                     //
+// Output : int                                             //
+//        (Out parameter Description)                       //
+// Purpose : check if the username and password are correct //
+//////////////////////////////////////////////////////////////
 int user_match(char* user, char* passwd)
 {
     FILE* fp;
     struct passwd* pw;
-    fp = fopen("passwd", "r");
+    fp = fopen("passwd", "r");  //open passwd
     if (fp == NULL) {
         return 0;
     }
+    /*********check if password and user name is efficient*********/
     while ((pw = fgetpwent(fp)) != NULL) {
-        if (!strcmp(user, pw->pw_name)) {
-            if (!strcmp(passwd, pw->pw_passwd)) {
+        if (!strcmp(user, pw->pw_name)) {    //if username if correct
+            if (!strcmp(passwd, pw->pw_passwd)) {    //if password is correct
                 return 1;
             }
         }
     }
+    /**************************************************************/
     return 0;
 }
+//////////////////////////////////////////////////////////////
+// log_auth                                                 //
+// ======================================================== //
+// Input : int connfd                                       //
+//        (Input parameter Description)                     //
+// Output : int                                             //
+//        (Out parameter Description)                       //
+// Purpose : check if user can log-in                       //
+//////////////////////////////////////////////////////////////
 int log_auth(int connfd)
 {
     char user[MAX_BUF], passwd[MAX_BUF];
@@ -91,27 +110,30 @@ int log_auth(int connfd)
         memset(user, 0, MAX_BUF);
         memset(passwd, 0, MAX_BUF);
         /****************   read username and password form client *************/
-        n = read(connfd, user, MAX_BUF);
-        write(connfd, "NULL", 5);
+        n = read(connfd, user, MAX_BUF);    //get username
 
-        n = read(connfd, passwd, MAX_BUF);
-        /***********************************************************************/
+        write(connfd, "NULL", 5);   //meaningless
+
+        n = read(connfd, passwd, MAX_BUF);  //get password
+    /***********************************************************************/
 
         write(connfd, "OK", 3);
+        char buf[MAX_BUF];
+        n = read(connfd, buf, MAX_BUF); //meaningless
 
-        if (n = (user_match(user, passwd)) == 1) {
-            write(connfd, "OK", 3);
+        if (n = (user_match(user, passwd)) == 1) {   //log-in succeeded
             return 1;
         }
         else if (n == 0) {
             if (count >= 3) {    /* 3 time failed*/
-                write(connfd, "DISCONNECTION", 14);
                 return 0;
             }
+            /****************re-try*****************/
             write(1, "** Log-in failed **\n", 21);
             write(connfd, "FAIL", 5);
             count++;
             continue;
+            /**************************************/
         }
     }
     return 1;
@@ -129,11 +151,21 @@ int log_auth(int connfd)
 void Ip_Slicing(char* str, char** sliced) {
     int num = 0;
     char* ptr = strtok(str, ".");
+    /*************** start slicing **************/
     while (ptr != NULL) {
-        strcpy(sliced[num++], ptr);
+        strcpy(sliced[num++], ptr);//strcat sliced string
         ptr = strtok(NULL, ".");
     }
 }
+/////////////////////////////////////////////////////////////////
+// main                                                        //
+// ========================================================    //
+// Input : int argc, char*argv[]                               //
+//        (Input parameter Description)                        //
+// Output : int                                                //
+//        (Out parameter Description)                          //
+// Purpose : connect sockets and check ip and user-information //
+/////////////////////////////////////////////////////////////////
 int main(int argc, char* argv[]) {
     int listenfd, connfd;
     struct sockaddr_in servaddr, cliaddr;
@@ -180,7 +212,7 @@ int main(int argc, char* argv[]) {
         /****************************************************/
 
         char IPs[MAX_BUF];
-        int find = 1;
+        int find = 0;
 
         /**************** check if client ip is acceptable ****************/
         while ((fgets(IPs, MAX_BUF, fp_checkIP) != NULL))
@@ -246,21 +278,22 @@ int main(int argc, char* argv[]) {
             write(1, "** It is not authenticated client **\n", 38);
             write(connfd, "REJECTION", 10);
             close(connfd);
-            close(listenfd);
-            exit(0);
+            continue;
         }
         /******************************************************/
 
         /******************************************************************/
 
-        if (log_auth(connfd) == 0) {
+        if (log_auth(connfd) == 0) {     //log-in failed
+            write(connfd, "DISCONNECTION", 14); //send disconnection
             write(1, "** Fail to log-in **\n", 22);
             close(connfd);
-            break;
             continue;
         }
+        /******log-in success*******/
+        write(connfd, "OK", 3);
         write(1, "** Success to log-in **\n", 25);
         close(connfd);
-        break;
+        /**************************/
     }
 }
