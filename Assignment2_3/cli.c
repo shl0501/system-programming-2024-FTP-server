@@ -1,6 +1,6 @@
 //////////////////////////////////////////////////////////////
 // File Name : cli.c                                        //
-// Date : 2024/05/16                                        //  
+// Date : 2024/05/14                                        //  
 // OS : Ubuntu 20.04 LTS 64bits                             //
 // Author : Lee Sang Hyeon                                  //
 // Student ID : 2019202032                                  //
@@ -140,9 +140,8 @@ int main(int argc, char**argv)
         buff[strlen(buff)-1] = '\0';
         
         if(conv_cmd(buff, cmd_buff) < 0){
-
-            /*error command*/
-
+            write(1, "NO command\n", 12);
+            continue;
         };
 
 
