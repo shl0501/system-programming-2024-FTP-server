@@ -11,8 +11,14 @@
        (ex) PORT 127,0,0,2,48,57
     2. server에서 PORT command를 변환하여 data connection 연결
     3. data connection을 통해 ftp 명령어 결과 송수신
+
+  * flow chart
+    ![flow3 drawio (8)](https://github.com/shl0501/system-programming-2024-FTP-server/assets/114389927/cf95d096-6048-4504-b199-791e10599e01)
+
   * 결과화면
-    ![image](https://github.com/shl0501/system-programming-2024-FTP-server/assets/114389927/46bb6fbc-5072-400e-8d06-edf4f8b75028)
+    ![image](https://github.com/shl0501/system-programming-2024-FTP-server/assets/114389927/7ca87249-bee7-4817-846f-358eefbea26b)
+
+ 
 
     
    
