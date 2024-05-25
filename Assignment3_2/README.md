@@ -1,13 +1,18 @@
-* Assignment3-1
-  * access.txt
-    * client가 접속 가능한 IP address 저장
-    * wildcard 사용
-  * passwd
-    * 사용자의 username, password 등 저장
-  * client, server 소켓
-    * client 소켓 IP address, Port number 지정 (예시) ./cli 127.0.01 20001
-    * server 소켓 port number 지정 (예시) ./srv 20001
+* Assignment3-2
+과제 목표 : 두 개의 소켓을 사용하여 control connection과 port connection을 생성하여 data를 송수신한다.
+  * control connection
+    * ACK 메시지 등을 주고 받음
+    * client에서 port 명령어와 FTP 명령어를 전달
+  * data connection
+    * client로부터 받은 FTP 명령어에 대한 결과를 전달
+    * 한번 사용한 후 close
   * 주요 동작
-    1. server에서 client 소켓의 ip address 확인 (access.txt)
-    2. client에서 user로부터 username, password 입력받기 (3회 이상 틀릴 시, log-in 실패)
-    3. server에서 입력받은 username, password로 로그인 가능 여부 확인 (passwd)
+    1. client에서 random port number를 만들고 해당 port number와 ip address를 PORT command 형태로 변환
+       (ex) PORT 127,0,0,2,48,57
+    2. server에서 PORT command를 변환하여 data connection 연결
+    3. data connection을 통해 ftp 명령어 결과 송수신
+  * 결과화면
+    ![image](https://github.com/shl0501/system-programming-2024-FTP-server/assets/114389927/46bb6fbc-5072-400e-8d06-edf4f8b75028)
+
+    
+   
