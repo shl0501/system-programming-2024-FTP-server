@@ -1,5 +1,5 @@
-* Assignment3-2
-과제 목표 : 두 개의 소켓을 사용하여 control connection과 port connection을 생성하여 data를 송수신한다.
+Assignment3-2
+* 과제 목표 : 두 개의 소켓을 사용하여 control connection과 port connection을 생성하여 data를 송수신한다.
   * control connection
     * ACK 메시지 등을 주고 받음
     * client에서 port 명령어와 FTP 명령어를 전달
